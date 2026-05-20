@@ -4,7 +4,7 @@ require('dotenv').config();
 const fastify = require('fastify')({ logger: false });
 const { randomUUID, createHash } = require('crypto');
 const { createClient } = require('redis');
-const { query, initDb, encryptSecret } = require('./db');
+const { query, initDb, encryptSecret, decryptSecret } = require('./db');
 
 const DEFAULT_RPM_LIMIT = Number(process.env.RATE_LIMIT_DEFAULT_PER_MIN || 2);
 const redis = createClient({ url: process.env.REDIS_URL });
@@ -61,13 +61,30 @@ fastify.post('/api/master-keys', async (req, reply) => {
 
 fastify.get('/api/subkeys', async () => {
   const { rows } = await query(`
-    SELECT id, name, token_prefix, provider, monthly_token_limit, requests_per_minute_limit,
+    SELECT id, name, token_prefix, token_ciphertext_b64, token_iv_b64, token_auth_tag_b64, token_key_version,
+           provider, monthly_token_limit, requests_per_minute_limit,
            tokens_used, status, spend_limit_usd, max_requests, request_count, allowed_models,
-           expires_at, created_at
+           EXTRACT(EPOCH FROM expires_at)::bigint AS expires_at,
+           EXTRACT(EPOCH FROM created_at)::bigint AS created_at
     FROM subkeys
     ORDER BY created_at DESC
   `);
-  return rows;
+
+  return rows.map((row) => {
+    let token = null;
+    if (row.token_ciphertext_b64 && row.token_iv_b64 && row.token_auth_tag_b64) {
+      try {
+        token = decryptSecret({
+          ciphertext_b64: row.token_ciphertext_b64,
+          iv_b64: row.token_iv_b64,
+          auth_tag_b64: row.token_auth_tag_b64,
+        }, `subkey:${row.id}`);
+      } catch (_) {
+        token = null;
+      }
+    }
+    return { ...row, token };
+  });
 });
 
 fastify.get('/api/analytics', async () => {
@@ -118,18 +135,23 @@ fastify.post('/api/subkeys', async (req, reply) => {
   const token_hash = hashToken(token);
   const token_prefix = token.slice(0, 12);
   const id = randomUUID();
+  const encryptedToken = encryptSecret(token, `subkey:${id}`);
   const expiresAt = expires_in_days ? new Date(Date.now() + Number(expires_in_days) * 86400 * 1000) : null;
 
   await query(
     `INSERT INTO subkeys (
-      id, name, token_hash, token_prefix, provider, monthly_token_limit, requests_per_minute_limit,
-      spend_limit_usd, max_requests, allowed_models, expires_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      id, name, token_hash, token_prefix, token_ciphertext_b64, token_iv_b64, token_auth_tag_b64, token_key_version,
+      provider, monthly_token_limit, requests_per_minute_limit, spend_limit_usd, max_requests, allowed_models, expires_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
     [
       id,
       name,
       token_hash,
       token_prefix,
+      encryptedToken.ciphertext_b64,
+      encryptedToken.iv_b64,
+      encryptedToken.auth_tag_b64,
+      encryptedToken.key_version,
       provider,
       Number(monthly_token_limit) || 50000,
       DEFAULT_RPM_LIMIT,

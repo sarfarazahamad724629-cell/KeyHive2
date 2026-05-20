@@ -91,6 +91,10 @@ async function initDb() {
         name TEXT NOT NULL,
         token_hash TEXT NOT NULL UNIQUE,
         token_prefix TEXT NOT NULL,
+        token_ciphertext_b64 TEXT,
+        token_iv_b64 TEXT,
+        token_auth_tag_b64 TEXT,
+        token_key_version INTEGER,
         provider TEXT NOT NULL,
         monthly_token_limit INTEGER DEFAULT 100000,
         requests_per_minute_limit INTEGER DEFAULT 2,
@@ -103,6 +107,11 @@ async function initDb() {
         expires_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_ciphertext_b64 TEXT;
+      ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_iv_b64 TEXT;
+      ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_auth_tag_b64 TEXT;
+      ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_key_version INTEGER;
 
       CREATE TABLE IF NOT EXISTS request_logs (
         id UUID PRIMARY KEY,
