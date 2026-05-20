@@ -58,6 +58,49 @@ fastify.post('/api/master-keys', async (req, reply) => {
   return { success: true };
 });
 
+
+fastify.get('/api/subkeys', async () => {
+  const { rows } = await query(`
+    SELECT id, name, token_prefix, provider, monthly_token_limit, requests_per_minute_limit,
+           tokens_used, status, spend_limit_usd, max_requests, request_count, allowed_models,
+           expires_at, created_at
+    FROM subkeys
+    ORDER BY created_at DESC
+  `);
+  return rows;
+});
+
+fastify.get('/api/analytics', async () => {
+  const [{ rows: totals }, { rows: logs }] = await Promise.all([
+    query(`SELECT COUNT(*)::int AS total_requests, COALESCE(SUM(tokens_used), 0)::int AS total_tokens FROM request_logs`),
+    query(`
+      SELECT id, subkey_id, subkey_name, model, tokens_used, status, source, latency_ms,
+             EXTRACT(EPOCH FROM created_at)::bigint AS created_at
+      FROM request_logs
+      ORDER BY created_at DESC
+      LIMIT 200
+    `),
+  ]);
+
+  const totalRequests = totals[0]?.total_requests || 0;
+  const totalTokens = totals[0]?.total_tokens || 0;
+  const avgLatency = logs.length
+    ? Math.round(logs.reduce((sum, row) => sum + Number(row.latency_ms || 0), 0) / logs.length)
+    : 0;
+
+  const topModelsMap = new Map();
+  for (const row of logs) {
+    const model = row.model || 'unknown';
+    topModelsMap.set(model, (topModelsMap.get(model) || 0) + 1);
+  }
+  const topModels = [...topModelsMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([model, count]) => ({ model, count }));
+
+  return { totalRequests, totalTokens, avgLatency, topModels, logs };
+});
+
 fastify.post('/api/subkeys', async (req, reply) => {
   const { name, provider, token } = req.body || {};
   if (!name || !provider || !token) return reply.code(400).send({ error: 'name, provider, token required' });
