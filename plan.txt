@@ -1,0 +1,217 @@
+# KeyHive Infrastructure & Security Implementation Plan
+
+## 1) Goals
+- Add Redis-based default rate limiting for all subkey users: **2 requests per minute**.
+- Enforce hard throttling by returning HTTP **429 Too Many Requests** when limit is exceeded.
+- Use PostgreSQL as the persistent datastore for API keys, subkeys, users, audit logs, usage logs, and related metadata.
+- Encrypt real/main provider API keys at rest using **AES-256-GCM** with authenticated encryption.
+- Build this so local WSL/dev setup and production are consistent and easy to operate.
+
+--- 
+
+## 2) High-Level Architecture
+
+### Request path
+1. Client calls KeyHive API with subkey.
+2. API authenticates subkey (from PostgreSQL-backed metadata, optionally cached).
+3. Redis rate limiter checks current 60-second usage window for that subkey.
+4. If over 2 requests/minute -> return 429 with retry headers/body.
+5. If allowed -> proceed to core logic.
+6. Main API key (encrypted in PostgreSQL) is decrypted only when needed for provider call.
+7. Request/response metadata and security events are logged into PostgreSQL.
+
+### Data responsibilities
+- **Redis**: ephemeral counters and short-lived abuse controls.
+- **PostgreSQL**: durable records (subkeys, encrypted main keys, logs, policies, revocations).
+
+---
+
+## 3) What We’ll Add
+
+## A) Redis Integration for Rate Limiting
+### Functional behavior
+- Default policy for subkeys: **2 requests per 60 seconds**.
+- Key format example: `rl:subkey:{subkey_id}:{window_epoch}` (fixed window) or token bucket variant.
+- Counter increment should be atomic (single Redis command sequence/Lua script if needed).
+- On limit breach:
+  - Return status `429`.
+  - Body: clear error code and message.
+  - Include headers like:
+    - `Retry-After`
+    - `X-RateLimit-Limit`
+    - `X-RateLimit-Remaining`
+    - `X-RateLimit-Reset`
+
+### Technical implementation approach
+- Use a Redis client in backend service initialization.
+- Add middleware/hook before protected routes.
+- For each request:
+  1. Resolve authenticated subkey id.
+  2. Compute window key.
+  3. Increment counter + set key expiry to 60s (only if new key).
+  4. Compare count with limit.
+  5. Block with 429 when count > 2.
+- Add fallback policy if Redis unavailable:
+  - Safer default: fail closed for privileged endpoints, configurable behavior for public-safe endpoints.
+
+### Extensibility
+- Support per-subkey overrides later (e.g., 5/min, 60/min) using PostgreSQL plan/policy table.
+- Add burst + sustained limits (e.g., per-second and per-minute) if needed.
+
+---
+
+## B) PostgreSQL for Persistent Storage
+### Core schema areas
+- `users`
+- `projects` / `workspaces`
+- `main_api_keys` (encrypted key material + encryption metadata)
+- `subkeys` (public id/prefix, hash, owner, scopes, status, rate policy id)
+- `rate_limit_policies` (default + custom limits)
+- `request_logs` (subkey id, endpoint, status, latency, timestamp)
+- `security_events` (auth failures, revoked key use, rate-limit breaches)
+
+### Key storage details
+- Never store raw subkeys in plaintext.
+- Store:
+  - subkey prefix for UX/debug,
+  - salted hash for verification,
+  - metadata/scopes/ownership.
+- Main provider API keys are encrypted (AES-256-GCM), stored as ciphertext + IV + auth tag + key version.
+
+### Ops
+- Use migrations for all schema changes.
+- Add DB indexes for high-traffic lookups:
+  - subkey hash,
+  - request log timestamp,
+  - security event timestamp/type,
+  - foreign keys.
+
+---
+
+## C) AES-256-GCM Encryption Plan (Main/Actual API Keys)
+### Encryption model
+- Algorithm: AES-256-GCM.
+- Per encryption operation:
+  - 32-byte data encryption key (DEK) context.
+  - 12-byte random IV/nonce (unique per record encryption).
+  - Ciphertext + authentication tag.
+- Associated Authenticated Data (AAD) can include stable context fields (`project_id`, `key_id`) to prevent context swapping.
+
+### Key management
+- Master key provided from environment/secret manager (`KEYHIVE_MASTER_KEY_BASE64`).
+- Prefer envelope approach:
+  - Master key protects/wraps DEKs (or derive DEKs via HKDF with context).
+- Include `key_version` column to support rotation.
+
+### Rotation strategy
+- Define playbook:
+  1. Introduce new master key version.
+  2. New writes use new version.
+  3. Background re-encrypt old rows.
+  4. Retire old version after verification.
+
+### Security requirements
+- Never log plaintext keys.
+- Zeroize sensitive buffers where runtime allows.
+- Restrict decrypt operations to strict service paths.
+- Add unit tests for encrypt/decrypt integrity and tamper detection (invalid tag must fail).
+
+---
+
+## 4) Setup Plan (Local + WSL)
+
+## Redis setup checks
+- Ensure Redis is running inside WSL and reachable from backend runtime.
+- Define env vars:
+  - `REDIS_URL=redis://localhost:6379`
+  - optional auth/TLS vars if enabled later.
+- Add health-check endpoint or startup probe for Redis connectivity.
+
+## PostgreSQL setup checks
+- Ensure PostgreSQL service is running on PC and accessible from app runtime.
+- Define `DATABASE_URL` with least-privileged DB user.
+- Create dedicated database for KeyHive.
+- Apply migrations to initialize schema.
+
+## Backend configuration
+- Add `.env` template entries:
+  - `DATABASE_URL`
+  - `REDIS_URL`
+  - `KEYHIVE_MASTER_KEY_BASE64`
+  - `RATE_LIMIT_DEFAULT_PER_MIN=2`
+- Validate config at startup and fail fast for missing critical security vars.
+
+---
+
+## 5) API/Behavior Contract
+- Rate-limited response should be consistent JSON, for example:
+  - `code: "RATE_LIMIT_EXCEEDED"`
+  - `message: "Too many requests. Try again later."`
+  - `retry_after_seconds: <n>`
+- Return 429 exactly when subkey exceeds configured limit.
+- All successful and blocked attempts should be loggable/auditable (with privacy-safe metadata).
+
+---
+
+## 6) Observability & Logging
+- Track metrics:
+  - total requests,
+  - 429 count,
+  - per-subkey throttle frequency,
+  - Redis errors,
+  - DB latency.
+- Add dashboards/alerts for abnormal spikes and abuse patterns.
+- Store security events in PostgreSQL for forensic review.
+
+---
+
+## 7) Testing Plan
+
+## Unit tests
+- Rate limiter logic (first 2 pass, 3rd fails in same minute).
+- Window reset behavior after 60 seconds.
+- Encryption/decryption happy path.
+- Decrypt failure on modified tag/ciphertext.
+
+## Integration tests
+- End-to-end request flow with real Redis + test PostgreSQL.
+- Validate 429 contract and rate-limit headers.
+- Validate encrypted key lifecycle: create, store, retrieve, decrypt for upstream call.
+
+## Load/abuse tests
+- Burst traffic against same subkey to confirm deterministic throttling.
+- Multiple subkeys in parallel to verify isolation.
+
+---
+
+## 8) Migration/Delivery Steps
+1. Add config + dependency wiring for Redis/PostgreSQL/encryption.
+2. Add PostgreSQL schema + migrations.
+3. Implement subkey auth + hashing flow if not already present.
+4. Implement Redis rate-limit middleware (2/min default).
+5. Implement 429 response contract + headers.
+6. Implement AES-256-GCM encryption service + key versioning fields.
+7. Add logging/metrics for rate limit and security events.
+8. Add tests (unit + integration).
+9. Stage rollout with monitoring and fallback toggles.
+
+---
+
+## 9) What We Need (Checklist)
+- Running Redis instance in WSL (host/port confirmed).
+- Running PostgreSQL instance with dedicated DB + user.
+- Secure master encryption key (base64 32-byte material or wrapped key flow).
+- Migration tool choice and baseline migration scripts.
+- Backend env management strategy (.env for local, secret manager for prod).
+- Test environment with Redis + Postgres services.
+- Logging/monitoring stack for alerts on 429 spikes and Redis/DB errors.
+
+---
+
+## 10) Suggested Immediate Next Actions
+1. Confirm backend framework + existing auth flow so middleware insertion point is precise.
+2. Create initial DB schema migration.
+3. Wire Redis client and implement fixed-window limiter first (simple + reliable).
+4. Add standardized 429 error formatter.
+5. Implement encryption utility and key metadata columns.
+6. Add integration test covering "2 pass + 3rd 429" for subkey within 60s.

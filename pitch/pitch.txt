@@ -1,0 +1,221 @@
+KeyGate Pitch Deck Narrative (Text Version)
+===========================================
+
+1) What is KeyGate?
+-------------------
+KeyGate is an API key access management and observability platform for AI usage.
+It sits between your apps and AI providers as a transparent proxy. Teams distribute
+safe subkeys instead of exposing real provider keys. KeyGate enforces limits,
+tracks usage, and provides governance tooling that converts “hidden AI spend” into
+visible, controllable operations.
+
+Core value:
+- Protect master keys
+- Delegate scoped subkeys
+- Enforce policy (model allowlists, quota, request caps, RPM)
+- Observe usage and costs by subkey/client/team
+- Reduce surprise bills and abuse risk
+
+
+2) What it does
+---------------
+A) Transparent request proxying
+- Client code only changes base_url to KeyGate endpoint.
+- Same OpenAI-like request body shape is forwarded to upstream provider.
+- KeyGate validates subkey and policy, injects master key server-side, and returns
+  provider response back to the client.
+
+B) Key hierarchy
+- Master keys: encrypted at rest, never returned in full.
+- Subkeys: scoped credentials for clients, contractors, products, or teams.
+
+C) Controls and governance
+- Monthly token budgets
+- Global request-per-minute guardrails
+- Max request count per subkey
+- Spend ceiling estimate
+- Allowed model restrictions (all or selected models)
+- Expiry and status controls (active/paused/revoked)
+
+D) Observability dashboard
+- Total requests
+- Failed requests
+- Error logs
+- Latency views
+- Top models/endpoints
+- Source attribution (dashboard vs external)
+- Subkey analytics and cost attribution estimate
+
+E) Notification workflows
+- Near-limit alerts
+- Expiring soon alerts
+- Quota extension request workflow
+
+
+3) Why people need it
+---------------------
+Problem today:
+- Teams share raw provider keys in insecure ways.
+- No clear accountability for usage by user/client/team.
+- AI costs rise silently; abuse and key leaks are hard to detect.
+- Finance and security teams have limited visibility/control.
+
+KeyGate benefits:
+- Security: real provider key never leaves backend.
+- Control: enforce policy before requests hit provider.
+- Visibility: know exactly who used what and when.
+- Budget confidence: avoid runaway cost incidents.
+- Operational maturity: from ad hoc scripts to governable platform.
+
+
+4) How everything works (high-level architecture)
+-------------------------------------------------
+1. Admin stores provider master key in KeyGate backend (encrypted).
+2. Admin creates subkeys with policies (quota/models/limits/expiry).
+3. Client sends AI request to KeyGate using subkey bearer token.
+4. KeyGate validates subkey + policy checks.
+5. If valid, KeyGate decrypts/injects master key and forwards request upstream.
+6. KeyGate logs metadata (status/tokens/latency/source/model).
+7. Dashboard and notifications display governance + observability insights.
+
+
+5) Deploy backend on Render.com
+-------------------------------
+A) Prepare repository
+- Ensure backend has start command and environment variable handling.
+- Confirm port binding uses process.env.PORT.
+
+B) Create Render Web Service
+1. Push repository to GitHub/GitLab.
+2. In Render: New > Web Service.
+3. Connect repo, select backend root.
+4. Runtime: Node.
+5. Build command: npm install
+6. Start command: node server.js (or npm run start)
+7. Set environment variables:
+   - NODE_ENV=production
+   - PORT (Render injects automatically)
+   - ENCRYPTION_SECRET (recommended, replace demo XOR strategy)
+   - DATABASE_URL (for PostgreSQL)
+
+C) Health and CORS
+- Add health route (/health) and set health check path in Render.
+- Set CORS origin to frontend URL(s) in production.
+
+D) Scale and reliability
+- Start with single instance; scale vertically/horizontally as usage grows.
+- Add structured logging + alerting.
+
+
+6) Deploy frontend on Netlify
+-----------------------------
+1. Connect repo to Netlify.
+2. Set base directory: frontend
+3. Build command: npm run build
+4. Publish directory: dist
+5. Add environment variable for backend URL (e.g., VITE_API_URL).
+6. Update frontend API base to use environment variable in production.
+7. Deploy and map custom domain if needed.
+
+Optional:
+- Add redirect rules if SPA route handling is needed.
+
+
+7) PostgreSQL on Render (production data layer)
+------------------------------------------------
+Current prototype uses in-memory SQL.js. For production:
+
+A) Provision database
+1. Render: New > PostgreSQL.
+2. Choose region close to backend.
+3. Copy internal DATABASE_URL.
+
+B) Backend migration plan
+- Replace SQL.js driver with PostgreSQL client (pg/knex/prisma/drizzle).
+- Move schema creation to explicit SQL migrations.
+- Add migration files for:
+  - master_keys
+  - subkeys
+  - request_logs
+  - quota_requests
+
+C) Suggested schema controls
+- Unique indexes: subkeys.token, master_keys.provider
+- Foreign keys: request_logs.subkey_id -> subkeys.id
+- Indexes:
+  - request_logs(created_at)
+  - request_logs(subkey_id, created_at)
+  - quota_requests(subkey_id, created_at)
+
+D) Security for key storage
+- Replace XOR with real encryption (AES-256-GCM via KMS or sealed secret pattern).
+- Store encryption key in Render env vars or dedicated key manager.
+
+E) Backups and retention
+- Enable automated backups.
+- Define retention for logs and PII policy.
+
+
+8) Investor and grants pitch angle
+----------------------------------
+Positioning:
+“Stripe for AI Key Governance”
+
+Narrative:
+- AI adoption is exploding; cost and security governance tooling is lagging.
+- Every AI-enabled company needs safe delegation, policy enforcement, and spend visibility.
+- KeyGate is lightweight to adopt (base_url swap) with immediate operational value.
+
+Business case:
+- Prevent cost overruns
+- Reduce security risk from key leakage
+- Improve chargeback/accountability internally and to clients
+
+Go-to-market targets:
+- AI agencies managing multiple clients
+- SaaS teams with user-level AI credits
+- Enterprises needing policy and audit trails
+
+Grant angle:
+- Improves responsible AI operations and governance
+- Supports cost transparency and anti-abuse controls
+- Contributes to safer AI deployment practices for SMEs
+
+Metrics to highlight:
+- # protected master keys
+- # subkeys managed
+- total requests proxied
+- spend saved via policy blocks
+- incident reduction (invalid/abusive requests)
+
+
+9) Suggested roadmap for production readiness
+---------------------------------------------
+Phase 1
+- PostgreSQL migration
+- robust encryption
+- auth for admin dashboard
+- audit logs and RBAC
+
+Phase 2
+- multi-provider adapters
+- webhook/Slack alerts
+- per-tenant billing plans
+- advanced anomaly detection
+
+Phase 3
+- enterprise SSO/SCIM
+- compliance exports
+- fine-grained endpoint policies
+- real-time analytics pipeline
+
+
+10) One-minute elevator pitch
+-----------------------------
+KeyGate is an AI key governance platform that lets companies safely share AI access
+without exposing real provider keys. We issue policy-controlled subkeys, enforce
+limits in real time, and provide clear analytics on who used what and how much it
+cost. Teams integrate by changing only base_url, then immediately gain security,
+cost control, and observability. KeyGate turns AI usage from a blind spot into a
+managed business system.
+

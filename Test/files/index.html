@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>KeyGate Client Test</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0d0d14;
+    color: #e8e8f0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 680px;
+    background: #141420;
+    border: 1px solid #ffffff12;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #ffffff0f;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header-icon {
+    width: 36px; height: 36px;
+    background: #7c6bff;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .header-title { font-size: 15px; font-weight: 600; }
+  .header-sub { font-size: 12px; color: #666688; margin-top: 2px; }
+  .badge {
+    margin-left: auto;
+    font-size: 11px;
+    background: #7c6bff18;
+    color: #a594ff;
+    border: 1px solid #7c6bff30;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  /* Status bar */
+  .status {
+    font-size: 12px;
+    padding: 8px 24px;
+    border-bottom: 1px solid #ffffff0f;
+    font-family: 'Courier New', monospace;
+  }
+  .status-ready   { color: #2dca72; background: #2dca7208; }
+  .status-loading { color: #ffb547; background: #ffb54708; }
+  .status-success { color: #2dca72; background: #2dca7210; }
+  .status-error   { color: #ff5252; background: #ff525210; }
+  .status-warn    { color: #ffb547; background: #ffb54710; }
+
+  /* Log output */
+  .log-wrap {
+    height: 320px;
+    overflow-y: auto;
+    padding: 16px 24px;
+    background: #08080f;
+    font-family: 'Courier New', monospace;
+    font-size: 12.5px;
+    line-height: 1.9;
+    border-bottom: 1px solid #ffffff0f;
+  }
+  .log-line { word-break: break-word; }
+  .log-dim     { color: #444466; }
+  .log-user    { color: #a594ff; }
+  .log-success { color: #2dca72; }
+  .log-error   { color: #ff5252; font-weight: 500; }
+  .log-meta    { color: #4a9eff; }
+  .log-warn    { color: #ffb547; }
+  .log-info    { color: #e8e8f0; }
+
+  /* Input area */
+  .input-row {
+    display: flex;
+    gap: 10px;
+    padding: 16px 24px;
+    align-items: flex-end;
+  }
+  textarea {
+    flex: 1;
+    background: #1a1a28;
+    border: 1px solid #ffffff18;
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #e8e8f0;
+    font-size: 14px;
+    font-family: inherit;
+    resize: none;
+    height: 44px;
+    line-height: 1.5;
+    outline: none;
+    transition: border-color .15s;
+  }
+  textarea:focus { border-color: #7c6bff; }
+  button {
+    background: #7c6bff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    height: 44px;
+    transition: background .15s;
+    font-family: inherit;
+  }
+  button:hover:not(:disabled) { background: #6c5bf0; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* Info strip */
+  .info-strip {
+    padding: 12px 24px;
+    background: #0f0f1c;
+    border-top: 1px solid #ffffff08;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .info-item { font-size: 11px; color: #444466; }
+  .info-item span { color: #666688; }
+
+  /* Scrollbar */
+  .log-wrap::-webkit-scrollbar { width: 3px; }
+  .log-wrap::-webkit-scrollbar-thumb { background: #333355; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="card">
+
+  <div class="header">
+    <div class="header-icon">🔑</div>
+    <div>
+      <div class="header-title">KeyGate — Client Test</div>
+      <div class="header-sub">Separate project · Uses only a subkey · No admin access</div>
+    </div>
+    <div class="badge">Standalone client</div>
+  </div>
+
+  <div class="status status-loading" id="status">Initializing...</div>
+
+  <div class="log-wrap" id="log"></div>
+
+  <div class="input-row">
+    <textarea id="prompt" placeholder="Type a message... (Enter to send)">Say hello in exactly 3 words.</textarea>
+    <button id="send-btn" onclick="sendMessage()">Send →</button>
+  </div>
+
+  <div class="info-strip">
+    <div class="info-item">Proxy: <span>localhost:3001</span></div>
+    <div class="info-item">Route: <span>POST /v1/chat/completions</span></div>
+    <div class="info-item">Auth: <span>Bearer sk-kg-...</span></div>
+    <div class="info-item">Real key: <span>never exposed to this file</span></div>
+  </div>
+
+</div>
+
+<!-- Load our client script -->
+<script src="client.js"></script>
+
+</body>
+</html>

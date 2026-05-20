@@ -1,0 +1,36 @@
+# KeyHive Next Steps (What I did vs What you need to do)
+
+## ✅ What I changed
+1. Migrated backend persistence from in-memory SQL.js to PostgreSQL wiring (`pg` Pool) in `backend/db.js`.
+2. Added AES-256-GCM encryption for master keys (`encryptSecret`) using env var `KEYHIVE_MASTER_KEY_BASE64`.
+3. Added startup DB initialization and Postgres schema creation logic.
+4. Added Redis client integration in `backend/server.js`.
+5. Implemented per-subkey default rate limiting at 2 requests/minute using Redis counters.
+6. Implemented 429 response payload + `Retry-After` + `X-RateLimit-*` headers.
+7. Switched subkey auth to hashed tokens (`sha256`) in DB instead of plaintext token storage.
+8. Added initial SQL migration file: `backend/migrations/001_initial_postgres.sql`.
+9. Added root `.env` template with placeholders (you set the master key).
+
+## 🛠 What you need to do next
+1. Generate a secure 32-byte master key and set `KEYHIVE_MASTER_KEY_BASE64` in `.env`.
+   - Example command:
+     - `openssl rand -base64 32`
+2. Create the PostgreSQL database (if not already):
+   - `createdb keyhive`
+3. Apply migration SQL:
+   - `psql "$DATABASE_URL" -f backend/migrations/001_initial_postgres.sql`
+4. Ensure Redis is running and reachable at `REDIS_URL`.
+5. Install backend dependencies locally (network/policy permitting):
+   - `cd backend && npm install`
+6. Start backend:
+   - `npm start`
+7. Seed at least one master key (`POST /api/master-keys`).
+8. Create a subkey (`POST /api/subkeys` with `token` field).
+9. Test rate limiting:
+   - Hit `/v1/chat/completions` 3 times within 60s with same subkey token.
+   - Expect first 2 pass, 3rd returns 429.
+
+## 🔎 Important notes
+- This is initial migration-ready scaffolding for Postgres + Redis + AES-GCM, with a proxy stub response.
+- Your Redis warning about `vm.overcommit_memory` is a host-level tuning note; set it in WSL to avoid background-save issues.
+- Keep `.env` secret and never commit real `KEYHIVE_MASTER_KEY_BASE64`.

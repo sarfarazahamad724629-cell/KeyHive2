@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>KeyGate — API Access Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;
+  --bg2:#111118;
+  --bg3:#18181f;
+  --bg4:#1e1e28;
+  --border:#ffffff0f;
+  --border2:#ffffff1a;
+  --text:#f0f0f5;
+  --muted:#888899;
+  --dim:#555566;
+  --accent:#7c6bff;
+  --accent2:#a594ff;
+  --green:#2dca72;
+  --red:#ff5252;
+  --amber:#ffb547;
+  --blue:#4a9eff;
+  --r:10px;
+  --r2:6px;
+}
+html{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.6}
+body{min-height:100vh;display:flex;flex-direction:column}
+
+/* ── Layout ── */
+.app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.main{background:var(--bg);overflow-y:auto;min-height:100vh}
+
+/* ── Sidebar ── */
+.logo{padding:24px 20px 20px;border-bottom:1px solid var(--border)}
+.logo-mark{display:flex;align-items:center;gap:10px}
+.logo-icon{width:30px;height:30px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center}
+.logo-icon svg{width:16px;height:16px;fill:white}
+.logo-name{font-family:'Syne',sans-serif;font-weight:700;font-size:16px;letter-spacing:-0.02em}
+.logo-sub{font-size:10px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin-top:1px}
+
+.nav{padding:12px 10px;flex:1}
+.nav-label{font-size:10px;color:var(--dim);letter-spacing:0.08em;text-transform:uppercase;padding:12px 10px 6px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r2);cursor:pointer;color:var(--muted);font-size:13px;font-weight:400;transition:all .15s;margin-bottom:1px;border:none;background:none;width:100%;text-align:left}
+.nav-item svg{width:15px;height:15px;opacity:.7;flex-shrink:0}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--bg4);color:var(--text)}
+.nav-item.active svg{opacity:1}
+.nav-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);margin-left:auto;flex-shrink:0}
+
+.sidebar-footer{padding:16px;border-top:1px solid var(--border)}
+.api-url-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px}
+.api-url-label{font-size:10px;color:var(--dim);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:4px}
+.api-url{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent2);word-break:break-all}
+
+/* ── Page ── */
+.page{display:none;padding:32px 36px;max-width:1100px}
+.page.active{display:block}
+.page-header{margin-bottom:28px}
+.page-title{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.03em}
+.page-sub{color:var(--muted);font-size:13px;margin-top:4px}
+
+/* ── Cards ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px 22px;margin-bottom:16px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:600;letter-spacing:.01em}
+.card-sub{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* ── Stats grid ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px}
+.stat-val{font-family:'DM Mono',monospace;font-size:26px;font-weight:500;letter-spacing:-0.03em;color:var(--text)}
+.stat-label{font-size:11px;color:var(--muted);margin-top:4px;letter-spacing:0.02em}
+.stat-delta{font-size:11px;color:var(--green);margin-top:6px;display:flex;align-items:center;gap:4px}
+
+/* ── Table ── */
+.table-wrap{overflow-x:auto;border-radius:var(--r2)}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);font-weight:500}
+td{padding:13px 14px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--bg3)}
+
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:500;letter-spacing:.02em}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.badge.active{background:#2dca7215;color:var(--green)}
+.badge.paused{background:#ffb54715;color:var(--amber)}
+.badge.revoked{background:#ff525215;color:var(--red)}
+
+/* ── Progress bar ── */
+.quota-bar{width:100%;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;margin-top:4px}
+.quota-fill{height:100%;border-radius:2px;transition:width .4s}
+.quota-fill.ok{background:var(--green)}
+.quota-fill.warn{background:var(--amber)}
+.quota-fill.over{background:var(--red)}
+.quota-text{font-size:11px;color:var(--muted);margin-top:4px;font-family:'DM Mono',monospace}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:var(--r2);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;border:1px solid transparent;font-family:'DM Sans',sans-serif}
+.btn-primary{background:var(--accent);color:white;border-color:var(--accent)}
+.btn-primary:hover{background:#6c5bf0}
+.btn-ghost{background:transparent;color:var(--muted);border-color:var(--border2)}
+.btn-ghost:hover{background:var(--bg3);color:var(--text)}
+.btn-danger{background:transparent;color:var(--red);border-color:#ff525220}
+.btn-danger:hover{background:#ff525210}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-amber{background:transparent;color:var(--amber);border-color:#ffb54720}
+.btn-amber:hover{background:#ffb54710}
+.btn-green{background:transparent;color:var(--green);border-color:#2dca7220}
+.btn-green:hover{background:#2dca7210}
+
+/* ── Token display ── */
+.token-box{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:8px 12px}
+.token-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--accent2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.token-copy{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;border-radius:3px;font-size:11px}
+.token-copy:hover{color:var(--text)}
+
+/* ── Form elements ── */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.form-row.single{grid-template-columns:1fr}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12px;color:var(--muted);font-weight:500}
+.field input,.field select{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r2);padding:9px 12px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.field select option{background:var(--bg3)}
+
+/* ── Modal ── */
+.modal-backdrop{position:fixed;inset:0;background:#00000088;display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-backdrop.open{opacity:1;pointer-events:all}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:28px;width:480px;max-width:90vw;transform:translateY(12px);transition:transform .2s}
+.modal-backdrop.open .modal{transform:translateY(0)}
+.modal-title{font-family:'Syne',sans-serif;font-size:17px;font-weight:700;margin-bottom:20px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+
+/* ── Token reveal ── */
+.reveal-box{background:var(--bg);border:1px solid var(--accent);border-radius:var(--r);padding:20px;margin-top:16px}
+.reveal-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.reveal-token{font-family:'DM Mono',monospace;font-size:13px;color:var(--accent2);word-break:break-all;line-height:1.8}
+.reveal-warning{font-size:12px;color:var(--amber);margin-top:10px;display:flex;align-items:start;gap:6px}
+
+/* ── Log table colors ── */
+.log-success{color:var(--green)}
+.log-error{color:var(--red)}
+.log-quota{color:var(--amber)}
+.mono{font-family:'DM Mono',monospace;font-size:12px}
+
+/* ── Demo console ── */
+.console{background:#060609;border:1px solid var(--border);border-radius:var(--r);padding:0;overflow:hidden}
+.console-bar{background:var(--bg3);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:8px}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot.r{background:#ff5f56}
+.dot.y{background:#ffbd2e}
+.dot.g{background:#27c93f}
+.console-body{padding:18px 20px;font-family:'DM Mono',monospace;font-size:12px;line-height:1.9;min-height:120px}
+.console-line{margin:0}
+.cl-dim{color:var(--dim)}
+.cl-green{color:var(--green)}
+.cl-red{color:var(--red)}
+.cl-amber{color:var(--amber)}
+.cl-blue{color:var(--blue)}
+.cl-accent{color:var(--accent2)}
+.cl-white{color:var(--text)}
+.cursor::after{content:'▋';animation:blink 1s step-end infinite;color:var(--accent)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty-icon{font-size:28px;margin-bottom:12px;opacity:.4}
+.empty-text{font-size:14px;margin-bottom:16px}
+
+/* ── Notification ── */
+.notif{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:12px 18px;font-size:13px;color:var(--text);z-index:200;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none}
+.notif.show{opacity:1;transform:translateY(0);pointer-events:all}
+.notif.success{border-left:3px solid var(--green)}
+.notif.error{border-left:3px solid var(--red)}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">
+      <div class="logo-icon">
+        <svg viewBox="0 0 16 16"><path d="M2 4h5v2H2zm7 0h5v2H9zM2 7h5v2H2zm7 0h5v2H9zM5 10h6v2H5z"/></svg>
+      </div>
+      <div>
+        <div class="logo-name">KeyGate</div>
+        <div class="logo-sub">API access manager</div>
+      </div>
+    </div>
+  </div>
+  <nav class="nav">
+    <div class="nav-label">Platform</div>
+    <button class="nav-item active" data-page="overview">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h5v6H2zm7 0h5v3H9zM9 7h5v7H9zM2 10h5v4H2z"/></svg>
+      Overview
+    </button>
+    <button class="nav-item" data-page="masterkeys">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10 0a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4zM0 14s-1 0-1-1 1-4 6-4h.5a5.5 5.5 0 0 0-.5 2v2H0z"/></svg>
+      Master keys
+    </button>
+    <button class="nav-item" data-page="subkeys">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 1a1 1 0 0 0-1 1v4.586a1 1 0 0 0 .293.707l7 7a1 1 0 0 0 1.414 0l4.586-4.586a1 1 0 0 0 0-1.414l-7-7A1 1 0 0 0 6.586 1H2zm4 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/></svg>
+      Subkeys
+    </button>
+    <button class="nav-item" data-page="logs">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5v-11zM4 4h8v1H4zm0 3h8v1H4zm0 3h5v1H4z"/></svg>
+      Request logs
+    </button>
+    <button class="nav-item" data-page="demo">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm4.5 5.5a.5.5 0 0 0 0 1h5.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5H4.5z"/></svg>
+      Live demo
+      <span class="nav-dot"></span>
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="api-url-box">
+      <div class="api-url-label">Proxy endpoint</div>
+      <div class="api-url" id="api-url-display">localhost:3001</div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- OVERVIEW PAGE -->
+<div class="page active" id="page-overview">
+  <div style="padding:32px 36px">
+  <div class="page-header">
+    <div class="page-title">Overview</div>
+    <div class="page-sub">Your API access at a glance</div>
+  </div>
+
+  <div class="stats" id="stats-grid">
+    <div class="stat"><div class="stat-val" id="stat-subkeys">—</div><div class="stat-label">Active subkeys</div></div>
+    <div class="stat"><div class="stat-val" id="stat-requests">—</div><div class="stat-label">Total requests</div></div>
+    <div class="stat"><div class="stat-val" id="stat-tokens">—</div><div class="stat-label">Tokens used</div></div>
+    <div class="stat"><div class="stat-val" id="stat-latency">—</div><div class="stat-label">Avg latency (ms)</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div><div class="card-title">Subkey usage snapshot</div><div class="card-sub">Quota consumption across all active keys</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('subkeys')">Manage →</button>
+    </div>
+    <div id="overview-subkeys-list"><div class="empty"><div class="empty-text">No subkeys yet</div></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div><div class="card-title">Recent activity</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('logs')">All logs →</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>Subkey</th><th>Model</th><th>Tokens</th><th>Latency</th><th>Status</th></tr></thead>
+        <tbody id="overview-logs"></tbody>
+      </table>
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- MASTER KEYS PAGE -->
+<div class="page" id="page-masterkeys">
+  <div style="padding:32px 36px">
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
+    <div>
+      <div class="page-title">Master keys</div>
+      <div class="page-sub">Your real provider API keys — stored encrypted, never exposed</div>
+    </div>
+    <button class="btn btn-primary" onclick="openAddKeyModal()">+ Add key</button>
+  </div>
+
+  <div class="card" style="background:#ffb54708;border-color:#ffb54720">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <span style="font-size:18px;flex-shrink:0">⚡</span>
+      <div>
+        <div style="font-size:13px;font-weight:500;color:var(--amber);margin-bottom:4px">Keys are encrypted at rest</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.7">Your master keys are encrypted before storage. They are never returned in any API response, never logged, and only injected server-side at request time. Your clients only ever see subkeys.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="masterkeys-list"></div>
+  </div>
+</div>
+
+<!-- SUBKEYS PAGE -->
+<div class="page" id="page-subkeys">
+  <div style="padding:32px 36px">
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
+    <div>
+      <div class="page-title">Subkeys</div>
+      <div class="page-sub">Scoped API tokens you distribute to employees, clients, or teams</div>
+    </div>
+    <button class="btn btn-primary" onclick="openCreateSubkeyModal()">+ Create subkey</button>
+  </div>
+
+  <div class="card" style="padding:0">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Token</th><th>Provider</th><th>Quota</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="subkeys-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- LOGS PAGE -->
+<div class="page" id="page-logs">
+  <div style="padding:32px 36px">
+  <div class="page-header">
+    <div class="page-title">Request logs</div>
+    <div class="page-sub">Every request proxied through KeyGate</div>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>Subkey</th><th>Model</th><th>Tokens</th><th>Latency</th><th>Status</th></tr></thead>
+        <tbody id="logs-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- LIVE DEMO PAGE -->
+<div class="page" id="page-demo">
+  <div style="padding:32px 36px">
+  <div class="page-header">
+    <div class="page-title">Live demo</div>
+    <div class="page-sub">See exactly how a client uses a subkey — without ever knowing the real key</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="card">
+      <div class="card-header" style="margin-bottom:12px">
+        <div class="card-title">Configure test call</div>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label>Subkey to test</label>
+        <select id="demo-subkey-select"><option value="">— select a subkey —</option></select>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label>Prompt</label>
+        <input type="text" id="demo-prompt" value="Say hello in exactly 5 words." placeholder="Your message..."/>
+      </div>
+      <div class="field" style="margin-bottom:16px">
+        <label>Model</label>
+        <select id="demo-model">
+          <option value="gpt-4o-mini">gpt-4o-mini</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="runDemo()">Run test call →</button>
+    </div>
+
+    <div class="card" style="background:#060609">
+      <div class="card-header" style="margin-bottom:12px">
+        <div class="card-title" style="color:var(--muted)">What the client sends</div>
+      </div>
+      <div id="demo-request-preview" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--dim);line-height:1.9">
+        Select a subkey to see the request preview...
+      </div>
+    </div>
+  </div>
+
+  <div class="console">
+    <div class="console-bar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <span style="font-size:11px;color:var(--muted);margin-left:8px">KeyGate proxy console</span>
+    </div>
+    <div class="console-body" id="demo-console">
+      <p class="console-line cl-dim"># KeyGate live proxy demo</p>
+      <p class="console-line cl-dim"># Select a subkey and hit "Run test call" to see the magic</p>
+      <p class="console-line" style="margin-top:8px"><span class="cl-accent">ready</span> <span class="cl-dim">—</span> <span class="cl-white">waiting for request</span> <span class="cursor"></span></p>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+    <div class="card" style="padding:16px">
+      <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Step 1</div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">Client uses subkey</div>
+      <div style="font-size:12px;color:var(--muted)">The real key never leaves the server. Clients only know their <span style="color:var(--accent2);font-family:'DM Mono',monospace">sk-kg-...</span> token.</div>
+    </div>
+    <div class="card" style="padding:16px">
+      <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Step 2</div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">Gateway validates + injects</div>
+      <div style="font-size:12px;color:var(--muted)">KeyGate checks quota, expiry, status — then injects your master key before forwarding to OpenAI.</div>
+    </div>
+    <div class="card" style="padding:16px">
+      <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Step 3</div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">Usage tracked in real time</div>
+      <div style="font-size:12px;color:var(--muted)">Every token is counted against the subkey's quota. You see exactly who used what.</div>
+    </div>
+  </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<!-- MODALS -->
+
+<!-- Add master key modal -->
+<div class="modal-backdrop" id="modal-addkey">
+  <div class="modal">
+    <div class="modal-title">Add provider key</div>
+    <div class="form-row single" style="margin-bottom:12px">
+      <div class="field">
+        <label>Provider</label>
+        <select id="addkey-provider">
+          <option value="openai">OpenAI</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row single">
+      <div class="field">
+        <label>API key</label>
+        <input type="password" id="addkey-value" placeholder="sk-..." autocomplete="off"/>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">This key will be encrypted immediately. You won't be able to retrieve it — only replace it.</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-addkey')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMasterKey()">Save encrypted key</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create subkey modal -->
+<div class="modal-backdrop" id="modal-createsubkey">
+  <div class="modal">
+    <div class="modal-title">Create subkey</div>
+    <div class="form-row">
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="sk-name" placeholder="e.g. Client A — Frontend"/>
+      </div>
+      <div class="field">
+        <label>Provider</label>
+        <select id="sk-provider"><option value="openai">OpenAI</option></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Monthly token limit</label>
+        <input type="number" id="sk-limit" value="50000" min="100"/>
+      </div>
+      <div class="field">
+        <label>Expires in (days)</label>
+        <input type="number" id="sk-expiry" placeholder="Leave blank = never"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-createsubkey')">Cancel</button>
+      <button class="btn btn-primary" onclick="createSubkey()">Generate subkey</button>
+    </div>
+  </div>
+</div>
+
+<!-- Token reveal modal -->
+<div class="modal-backdrop" id="modal-tokenreveal">
+  <div class="modal">
+    <div class="modal-title">Subkey created</div>
+    <div style="font-size:13px;color:var(--muted)">Copy this token now. It won't be shown again in full.</div>
+    <div class="reveal-box">
+      <div class="reveal-label">Your subkey token</div>
+      <div class="reveal-token" id="reveal-token-value">—</div>
+    </div>
+    <div class="reveal-warning">
+      <span>⚠</span>
+      <span>This is shown once. Save it somewhere safe — your client will use this as their API key.</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="copyToken()">Copy token</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-tokenreveal')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notification -->
+<div class="notif" id="notif"></div>
+
+<script>
+const API = 'http://localhost:8787' // Change to match your backend port;
+let subkeys = [], masterKeys = [], logs = [];
+
+// ── Navigation ──────────────────────────────────────────────────────────────
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelector(`[data-page="${page}"]`).classList.add('active');
+  if (page === 'overview') loadOverview();
+  if (page === 'masterkeys') loadMasterKeys();
+  if (page === 'subkeys') loadSubkeys();
+  if (page === 'logs') loadLogs();
+  if (page === 'demo') loadDemo();
+}
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => navigate(btn.dataset.page));
+});
+
+// ── API helpers ─────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  return res.json();
+}
+
+// ── Notification ─────────────────────────────────────────────────────────────
+function notify(msg, type = 'success') {
+  const el = document.getElementById('notif');
+  el.textContent = msg;
+  el.className = 'notif show ' + type;
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Modals ───────────────────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-backdrop').forEach(b => {
+  b.addEventListener('click', e => { if (e.target === b) b.classList.remove('open'); });
+});
+
+// ── Formatting ───────────────────────────────────────────────────────────────
+function fmtNum(n) {
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'k';
+  return String(n || 0);
+}
+function fmtTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function fmtDate(ts) {
+  if (!ts) return 'Never';
+  return new Date(ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function quotaColor(used, limit) {
+  const pct = (used / limit) * 100;
+  if (pct > 90) return 'over';
+  if (pct > 70) return 'warn';
+  return 'ok';
+}
+
+// ── Overview ─────────────────────────────────────────────────────────────────
+async function loadOverview() {
+  const [sks, analytics] = await Promise.all([
+    api('/api/subkeys'), api('/api/analytics')
+  ]);
+  subkeys = sks;
+  logs = analytics.logs || [];
+
+  document.getElementById('stat-subkeys').textContent = sks.filter(s => s.status === 'active').length;
+  document.getElementById('stat-requests').textContent = fmtNum(analytics.totalRequests);
+  document.getElementById('stat-tokens').textContent = fmtNum(analytics.totalTokens);
+  document.getElementById('stat-latency').textContent = analytics.avgLatency || '—';
+
+  const skList = document.getElementById('overview-subkeys-list');
+  if (!sks.length) {
+    skList.innerHTML = '<div class="empty"><div class="empty-text">No subkeys yet — <button class="btn btn-ghost btn-sm" onclick="navigate(\'subkeys\')">create one</button></div></div>';
+  } else {
+    skList.innerHTML = sks.slice(0, 5).map(sk => {
+      const pct = Math.min(100, Math.round((sk.tokens_used / sk.monthly_token_limit) * 100));
+      const col = quotaColor(sk.tokens_used, sk.monthly_token_limit);
+      return `<div style="display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;margin-bottom:2px">${esc(sk.name)}</div>
+          <div class="quota-bar"><div class="quota-fill ${col}" style="width:${pct}%"></div></div>
+          <div class="quota-text">${fmtNum(sk.tokens_used)} / ${fmtNum(sk.monthly_token_limit)} tokens — ${pct}%</div>
+        </div>
+        <span class="badge ${sk.status}">${sk.status}</span>
+      </div>`;
+    }).join('');
+  }
+
+  const tbody = document.getElementById('overview-logs');
+  tbody.innerHTML = logs.slice(0, 8).map(l => logRow(l)).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--dim);padding:24px">No requests yet</td></tr>';
+}
+
+// ── Master Keys ───────────────────────────────────────────────────────────────
+async function loadMasterKeys() {
+  masterKeys = await api('/api/master-keys');
+  const list = document.getElementById('masterkeys-list');
+  if (!masterKeys.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">🔑</div><div class="empty-text">No master keys configured</div><button class="btn btn-primary" onclick="openAddKeyModal()">Add your first key</button></div>';
+    return;
+  }
+  list.innerHTML = masterKeys.map(mk => `
+    <div class="card" style="display:flex;align-items:center;gap:16px">
+      <div style="width:40px;height:40px;background:var(--bg4);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">
+        ${mk.provider === 'openai' ? '⬛' : '🔵'}
+      </div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:500;margin-bottom:3px">${mk.provider === 'openai' ? 'OpenAI' : mk.provider}</div>
+        <div class="token-val" style="font-size:12px;color:var(--muted)">${mk.key_masked}</div>
+      </div>
+      <div style="font-size:12px;color:var(--dim)">Added ${fmtDate(mk.created_at)}</div>
+      <span style="font-size:11px;background:#2dca7215;color:var(--green);padding:3px 9px;border-radius:20px">Encrypted</span>
+      <button class="btn btn-danger btn-sm" onclick="deleteMasterKey('${mk.id}')">Remove</button>
+    </div>
+  `).join('');
+}
+
+function openAddKeyModal() { openModal('modal-addkey'); }
+
+async function saveMasterKey() {
+  const provider = document.getElementById('addkey-provider').value;
+  const api_key = document.getElementById('addkey-value').value.trim();
+  if (!api_key) { notify('Enter an API key', 'error'); return; }
+  await api('/api/master-keys', { method: 'POST', body: { provider, api_key } });
+  closeModal('modal-addkey');
+  document.getElementById('addkey-value').value = '';
+  notify('Master key saved — encrypted');
+  loadMasterKeys();
+}
+
+async function deleteMasterKey(id) {
+  if (!confirm('Remove this master key? Any subkeys using it will stop working.')) return;
+  await api('/api/master-keys/' + id, { method: 'DELETE' });
+  notify('Master key removed');
+  loadMasterKeys();
+}
+
+// ── Subkeys ──────────────────────────────────────────────────────────────────
+async function loadSubkeys() {
+  subkeys = await api('/api/subkeys');
+  const tbody = document.getElementById('subkeys-table-body');
+  if (!subkeys.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--dim);padding:32px">No subkeys yet — create one above</td></tr>';
+    return;
+  }
+  tbody.innerHTML = subkeys.map(sk => {
+    const pct = Math.min(100, Math.round((sk.tokens_used / sk.monthly_token_limit) * 100));
+    const col = quotaColor(sk.tokens_used, sk.monthly_token_limit);
+    const masked = sk.token.slice(0, 12) + '••••••••' + sk.token.slice(-4);
+    return `<tr>
+      <td style="font-weight:500">${esc(sk.name)}</td>
+      <td>
+        <div class="token-box" style="max-width:200px">
+          <span class="token-val">${masked}</span>
+          <button class="token-copy" onclick="copyText('${sk.token}')">copy</button>
+        </div>
+      </td>
+      <td><span style="font-size:12px;background:var(--bg3);padding:3px 8px;border-radius:4px;font-family:'DM Mono',monospace">${sk.provider}</span></td>
+      <td style="min-width:120px">
+        <div class="quota-bar"><div class="quota-fill ${col}" style="width:${pct}%"></div></div>
+        <div class="quota-text">${fmtNum(sk.tokens_used)} / ${fmtNum(sk.monthly_token_limit)}</div>
+      </td>
+      <td style="font-size:12px;color:var(--muted)">${fmtDate(sk.expires_at)}</td>
+      <td><span class="badge ${sk.status}">${sk.status}</span></td>
+      <td>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${sk.status === 'active' ? `<button class="btn btn-amber btn-sm" onclick="patchSubkey('${sk.id}','paused')">Pause</button>` : ''}
+          ${sk.status === 'paused' ? `<button class="btn btn-green btn-sm" onclick="patchSubkey('${sk.id}','active')">Resume</button>` : ''}
+          ${sk.status !== 'revoked' ? `<button class="btn btn-danger btn-sm" onclick="revokeSubkey('${sk.id}')">Revoke</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openCreateSubkeyModal() { openModal('modal-createsubkey'); }
+
+async function createSubkey() {
+  const name = document.getElementById('sk-name').value.trim();
+  const provider = document.getElementById('sk-provider').value;
+  const limit = parseInt(document.getElementById('sk-limit').value) || 50000;
+  const expiry = parseInt(document.getElementById('sk-expiry').value) || null;
+  if (!name) { notify('Enter a name', 'error'); return; }
+  const sk = await api('/api/subkeys', { method: 'POST', body: { name, provider, monthly_token_limit: limit, expires_in_days: expiry } });
+  if (sk.error) { notify(sk.error, 'error'); return; }
+  closeModal('modal-createsubkey');
+  document.getElementById('reveal-token-value').textContent = sk.token;
+  openModal('modal-tokenreveal');
+  document.getElementById('sk-name').value = '';
+  subkeys.unshift(sk);
+  loadSubkeys();
+}
+
+async function patchSubkey(id, status) {
+  await api('/api/subkeys/' + id, { method: 'PATCH', body: { status } });
+  notify(status === 'paused' ? 'Subkey paused' : 'Subkey resumed');
+  loadSubkeys();
+}
+
+async function revokeSubkey(id) {
+  if (!confirm('Revoke this subkey? It will stop working immediately.')) return;
+  await api('/api/subkeys/' + id, { method: 'PATCH', body: { status: 'revoked' } });
+  notify('Subkey revoked');
+  loadSubkeys();
+}
+
+function copyToken() {
+  copyText(document.getElementById('reveal-token-value').textContent);
+}
+
+// ── Logs ─────────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const analytics = await api('/api/analytics');
+  logs = analytics.logs || [];
+  const tbody = document.getElementById('logs-table-body');
+  if (!logs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--dim);padding:32px">No requests yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = logs.map(l => logRow(l)).join('');
+}
+
+function logRow(l) {
+  const statusClass = l.status === 'success' ? 'log-success' : l.status === 'quota_exceeded' ? 'log-quota' : 'log-error';
+  return `<tr>
+    <td class="mono" style="color:var(--dim)">${fmtTime(l.created_at)}</td>
+    <td style="font-weight:500">${esc(l.subkey_name || '—')}</td>
+    <td class="mono" style="font-size:12px">${esc(l.model || '—')}</td>
+    <td class="mono">${fmtNum(l.tokens_used)}</td>
+    <td class="mono" style="color:var(--muted)">${l.latency_ms ? l.latency_ms + 'ms' : '—'}</td>
+    <td class="${statusClass}" style="font-size:12px;font-weight:500">${l.status}</td>
+  </tr>`;
+}
+
+// ── Demo ─────────────────────────────────────────────────────────────────────
+async function loadDemo() {
+  subkeys = await api('/api/subkeys');
+  const sel = document.getElementById('demo-subkey-select');
+  sel.innerHTML = '<option value="">— select a subkey —</option>' +
+    subkeys.filter(s => s.status === 'active').map(s =>
+      `<option value="${s.token}" data-name="${esc(s.name)}">${esc(s.name)}</option>`
+    ).join('');
+  sel.addEventListener('change', updateRequestPreview);
+}
+
+function updateRequestPreview() {
+  const token = document.getElementById('demo-subkey-select').value;
+  const model = document.getElementById('demo-model').value;
+  const prompt = document.getElementById('demo-prompt').value;
+  const preview = document.getElementById('demo-request-preview');
+  if (!token) { preview.innerHTML = '<span style="color:var(--dim)">Select a subkey to see the request preview...</span>'; return; }
+  const masked = token.slice(0, 12) + '••••••';
+  preview.innerHTML = `<span style="color:var(--dim)">POST /v1/chat/completions</span>
+<span style="color:var(--dim)">Authorization: Bearer </span><span style="color:var(--accent2)">${masked}</span>
+
+<span style="color:var(--dim)">{</span>
+  <span style="color:var(--blue)">"model"</span>: <span style="color:var(--green)">"${model}"</span>,
+  <span style="color:var(--blue)">"messages"</span>: [{
+    <span style="color:var(--blue)">"role"</span>: <span style="color:var(--green)">"user"</span>,
+    <span style="color:var(--blue)">"content"</span>: <span style="color:var(--green)">"${esc(prompt)}"</span>
+  }]
+<span style="color:var(--dim)">}</span>`;
+}
+
+document.getElementById('demo-subkey-select')?.addEventListener('change', updateRequestPreview);
+document.getElementById('demo-model')?.addEventListener('change', updateRequestPreview);
+document.getElementById('demo-prompt')?.addEventListener('input', updateRequestPreview);
+
+async function runDemo() {
+  const token = document.getElementById('demo-subkey-select').value;
+  const model = document.getElementById('demo-model').value;
+  const prompt = document.getElementById('demo-prompt').value.trim();
+  const con = document.getElementById('demo-console');
+
+  if (!token) { notify('Select a subkey first', 'error'); return; }
+  if (!prompt) { notify('Enter a prompt', 'error'); return; }
+
+  const skName = document.getElementById('demo-subkey-select').selectedOptions[0].dataset.name;
+
+  con.innerHTML = `<p class="console-line"><span class="cl-dim">$</span> <span class="cl-white">sending request with subkey </span><span class="cl-accent">${token.slice(0,16)}…</span></p>`;
+  await sleep(300);
+  appendLine(con, `<span class="cl-dim">→ POST </span><span class="cl-blue">http://localhost:3001 (or :3003/:3004)/v1/chat/completions</span>`);
+  await sleep(400);
+  appendLine(con, `<span class="cl-dim">→ validating subkey </span><span class="cl-amber">${esc(skName)}</span>`);
+  await sleep(350);
+  appendLine(con, `<span class="cl-green">✓ subkey valid — quota OK</span>`);
+  await sleep(250);
+  appendLine(con, `<span class="cl-dim">→ decrypting master key (server-side only)</span>`);
+  await sleep(300);
+  appendLine(con, `<span class="cl-dim">→ forwarding to </span><span class="cl-blue">api.openai.com</span><span class="cl-dim"> with real key</span>`);
+  await sleep(200);
+  appendLine(con, `<span class="cl-amber">⏳ waiting for OpenAI response…</span>`);
+
+  const start = Date.now();
+  try {
+    const res = await fetch(API + '/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 150 })
+    });
+    const data = await res.json();
+    const latency = Date.now() - start;
+
+    if (!res.ok) {
+      appendLine(con, `<span class="cl-red">✗ error ${res.status}: ${esc(data.error?.message || 'unknown error')}</span>`);
+      return;
+    }
+
+    const reply = data.choices?.[0]?.message?.content || '';
+    const tokens = data.usage?.total_tokens || 0;
+
+    appendLine(con, `<span class="cl-green">✓ response received in ${latency}ms</span>`);
+    appendLine(con, `<span class="cl-dim">→ tokens used: </span><span class="cl-accent">${tokens}</span><span class="cl-dim"> (quota updated)</span>`);
+    appendLine(con, ``);
+    appendLine(con, `<span class="cl-dim">AI response:</span>`);
+    appendLine(con, `<span class="cl-white" style="background:#ffffff08;padding:6px 10px;border-radius:4px;display:inline-block;margin-top:2px">${esc(reply)}</span>`);
+
+    notify('Request proxied — check logs for usage');
+    setTimeout(() => {
+      if (document.getElementById('page-logs').classList.contains('active')) loadLogs();
+      if (document.getElementById('page-overview').classList.contains('active')) loadOverview();
+    }, 500);
+  } catch (err) {
+    appendLine(con, `<span class="cl-red">✗ connection error: ${esc(err.message)}</span>`);
+  }
+}
+
+function appendLine(con, html) {
+  const p = document.createElement('p');
+  p.className = 'console-line';
+  p.innerHTML = html;
+  con.appendChild(p);
+  con.scrollTop = con.scrollHeight;
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => notify('Copied to clipboard'));
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadOverview();
+</script>
+</body>
+</html>
