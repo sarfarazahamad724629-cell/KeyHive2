@@ -115,6 +115,16 @@ async function initDb() {
         latency_ms INTEGER,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS quota_requests (
+        id UUID PRIMARY KEY,
+        subkey_id UUID NOT NULL,
+        request_type TEXT NOT NULL,
+        amount TEXT,
+        note TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
   } catch (err) {
     if (err && /client password must be a string/i.test(err.message || '')) {

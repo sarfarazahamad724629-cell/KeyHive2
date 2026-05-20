@@ -102,17 +102,80 @@ fastify.get('/api/analytics', async () => {
 });
 
 fastify.post('/api/subkeys', async (req, reply) => {
-  const { name, provider, token } = req.body || {};
-  if (!name || !provider || !token) return reply.code(400).send({ error: 'name, provider, token required' });
+  const {
+    name,
+    provider,
+    monthly_token_limit = 50000,
+    max_requests = 5000,
+    allowed_models = ['all'],
+    spend_limit_usd = null,
+    expires_in_days = null,
+  } = req.body || {};
+
+  if (!name || !provider) return reply.code(400).send({ error: 'name and provider required' });
+
+  const token = `sk-kg-${randomUUID().replace(/-/g, '')}`;
   const token_hash = hashToken(token);
-  const token_prefix = token.slice(0, 10);
+  const token_prefix = token.slice(0, 12);
+  const id = randomUUID();
+  const expiresAt = expires_in_days ? new Date(Date.now() + Number(expires_in_days) * 86400 * 1000) : null;
+
+  await query(
+    `INSERT INTO subkeys (
+      id, name, token_hash, token_prefix, provider, monthly_token_limit, requests_per_minute_limit,
+      spend_limit_usd, max_requests, allowed_models, expires_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [
+      id,
+      name,
+      token_hash,
+      token_prefix,
+      provider,
+      Number(monthly_token_limit) || 50000,
+      DEFAULT_RPM_LIMIT,
+      spend_limit_usd,
+      Number(max_requests) || 5000,
+      JSON.stringify(allowed_models && allowed_models.length ? allowed_models : ['all']),
+      expiresAt,
+    ],
+  );
+
+  return { id, name, provider, token_prefix, token, requests_per_minute_limit: DEFAULT_RPM_LIMIT };
+});
+
+
+fastify.get('/api/models', async () => {
+  return {
+    data: [
+      { id: 'gpt-4o-mini' },
+      { id: 'gpt-4o' },
+      { id: 'gpt-4.1-mini' },
+      { id: 'gpt-4.1' },
+    ],
+  };
+});
+
+fastify.get('/api/quota-requests', async () => {
+  const { rows } = await query(`
+    SELECT q.id, q.subkey_id, s.name AS subkey_name, q.request_type, q.amount, q.note, q.status,
+           EXTRACT(EPOCH FROM q.created_at)::bigint AS created_at
+    FROM quota_requests q
+    LEFT JOIN subkeys s ON s.id = q.subkey_id
+    ORDER BY q.created_at DESC
+  `);
+  return rows;
+});
+
+fastify.post('/api/quota-requests', async (req, reply) => {
+  const { subkey_id, request_type, amount = null, note = '' } = req.body || {};
+  if (!subkey_id || !request_type) return reply.code(400).send({ error: 'subkey_id and request_type required' });
   const id = randomUUID();
   await query(
-    `INSERT INTO subkeys (id, name, token_hash, token_prefix, provider, requests_per_minute_limit)
+    `INSERT INTO quota_requests (id, subkey_id, request_type, amount, note, status)
      VALUES ($1,$2,$3,$4,$5,$6)`,
-    [id, name, token_hash, token_prefix, provider, DEFAULT_RPM_LIMIT],
+    [id, subkey_id, request_type, amount ? String(amount) : null, note, 'pending'],
   );
-  return { id, name, provider, token_prefix, requests_per_minute_limit: DEFAULT_RPM_LIMIT };
+  return { success: true, id };
 });
 
 fastify.post('/v1/chat/completions', async (req, reply) => {
