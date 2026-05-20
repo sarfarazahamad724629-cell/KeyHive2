@@ -7,7 +7,7 @@ import LogsPage from './components/pages/LogsPage';
 import DemoPage from './components/pages/DemoPage';
 import NotificationsPage from './components/pages/NotificationsPage';
 
-const API = 'http://localhost:8787'; // Change to match your backend port
+const API = 'http://localhost:3001'; // Change to match your backend port
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const fmtNum = (n) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0));
 const fmtTime = (ts) => (!ts ? '—' : new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));

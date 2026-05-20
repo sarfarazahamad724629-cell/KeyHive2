@@ -103,7 +103,7 @@ async function start() {
   await initDb();
   console.log('✅ PostgreSQL connected');
 
-  const port = Number(process.env.PORT || 8787);
+  const port = Number(process.env.PORT || 3001);
 
   await fastify.listen({
     port,
