@@ -4,7 +4,7 @@ export default function OverviewPage({ ctx, navigate }) {
   const { subkeys, logs, analytics, fmtNum, quotaColor, fmtTime } = ctx;
   const failed = logs.filter((l) => l.status !== 'success').length;
   const costUsed = analytics.costAttribution?.reduce((s, r) => s + (r.est_cost_usd || 0), 0) || 0;
-  const topEndpoint = '/v1/chat/completions';
+  const topUser = Object.entries(todayBySubkey).sort((a,b)=>b[1]-a[1])[0];
   const todayBySubkey = logs.reduce((acc, l) => { acc[l.subkey_name || '—'] = (acc[l.subkey_name || '—'] || 0) + (l.tokens_used || 0); return acc; }, {});
 
   return <div className='page active'><div style={{ padding: '32px 36px' }}>
@@ -18,7 +18,7 @@ export default function OverviewPage({ ctx, navigate }) {
 
     <div className='card'><div className='card-header'><div><div className='card-title'>Top endpoints & abuse detection</div><div className='card-sub'>Most traffic endpoint and suspicious usage hints</div></div><button className='btn btn-ghost btn-sm' onClick={() => navigate('logs')}>Inspect logs →</button></div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
-        <div className='card' style={{margin:0,padding:'14px'}}><div className='card-sub'>Top endpoint</div><div className='mono' style={{fontSize:'13px',marginTop:'4px'}}>{topEndpoint}</div></div>
+        <div className='card' style={{margin:0,padding:'14px'}}><div className='card-sub'>Top user</div><div className='mono' style={{fontSize:'13px',marginTop:'4px'}}>{topUser ? `${topUser[0]} — ${fmtNum(topUser[1])} tokens` : '—'}</div></div>
         <div className='card' style={{margin:0,padding:'14px'}}><div className='card-sub'>Abuse detection</div><div style={{marginTop:'4px',fontSize:'12px'}}>{failed > analytics.totalRequests * 0.35 ? 'High error ratio detected' : 'No obvious abuse signal detected'}</div></div>
       </div>
     </div>

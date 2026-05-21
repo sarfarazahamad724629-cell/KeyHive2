@@ -1,1 +1,6 @@
-/* page-specific styles kept in global style parity */
+.demo-page .card{box-shadow:0 10px 30px #00000026;}
+.demo-page .console{border-color:#ffffff1f;}
+.demo-page .snippet-grid .card{min-width:0;overflow:hidden;}
+.demo-page .snippet-grid pre{max-width:100%;overflow:auto;}
+@media (max-width: 1200px){ .demo-page .snippet-grid{grid-template-columns:1fr 1fr !important;} }
+@media (max-width: 820px){ .demo-page .snippet-grid{grid-template-columns:1fr !important;} }

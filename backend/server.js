@@ -117,6 +117,25 @@ fastify.get('/api/quota-requests', async () => {
   return rows;
 });
 
+
+fastify.patch('/api/quota-requests/:id', async (req, reply) => {
+  const { status } = req.body || {};
+  if (!['approved', 'rejected', 'pending'].includes(status)) return reply.code(400).send({ error: 'status must be approved|rejected|pending' });
+  const { rows } = await query('UPDATE quota_requests SET status = $1 WHERE id = $2 RETURNING *', [status, req.params.id]);
+  const r = rows[0];
+  if (r && status === 'approved') {
+    if (r.request_type === 'credits' && r.amount) {
+      const add = Math.max(0, Number(String(r.amount).replace(/[^0-9.]/g, '')) || 0) * 1000;
+      await query('UPDATE subkeys SET monthly_token_limit = COALESCE(monthly_token_limit,0) + $1 WHERE id = $2', [Math.round(add), r.subkey_id]);
+    }
+    if (r.request_type === 'expiry_extend' && r.amount) {
+      const days = Math.max(0, Number(String(r.amount).replace(/[^0-9.]/g, '')) || 0);
+      await query("UPDATE subkeys SET expires_at = COALESCE(expires_at, NOW()) + ($1 || ' days')::interval WHERE id = $2", [String(Math.round(days)), r.subkey_id]);
+    }
+  }
+  return { success: true };
+});
+
 fastify.post('/api/quota-requests', async (req, reply) => {
   const { subkey_id, request_type, amount = null, note = '' } = req.body || {};
   if (!subkey_id || !request_type) return reply.code(400).send({ error: 'subkey_id and request_type required' });

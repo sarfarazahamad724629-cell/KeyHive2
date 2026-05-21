@@ -65,7 +65,7 @@ export default function DemoPage({ ctx }) {
 
   const snippetCard = (title, code) => <div className='card' onClick={() => copyText(code)} style={{ cursor: 'pointer' }}><div className='card-title'>{title}</div><pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'DM Mono, monospace', fontSize: '12px', marginTop: '8px' }}>{code}</pre></div>;
 
-  return <div className='page active'><div style={{ padding: '32px 36px' }}><div className='page-header'><div className='page-title'>Live demo</div><div className='page-sub'>See exactly how a client uses a subkey — without ever knowing the real key</div></div>
+  return <div className='page active demo-page'><div style={{ padding: '32px 36px' }}><div className='page-header'><div className='page-title'>Live demo</div><div className='page-sub'>See exactly how a client uses a subkey — without ever knowing the real key</div></div>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
       <div className='card'><div className='card-header'><div className='card-title'>Configure test call</div></div>
         <div className='field'><label>Subkey to test</label><select value={token} onChange={(e) => setToken(e.target.value)}><option value=''>— select a subkey —</option>{active.map((s) => <option key={s.id} value={s.token}>{s.name}</option>)}</select></div>
@@ -76,6 +76,6 @@ export default function DemoPage({ ctx }) {
       <div className='card' style={{ background: '#060609' }}><div className='card-title' style={{ color: 'var(--text)' }}>What the client sends</div><pre style={{ fontFamily: 'DM Mono, monospace', fontSize: '12px', color: 'var(--text)', lineHeight: 1.9, whiteSpace: 'pre-wrap', marginTop: '8px' }}>{preview}</pre></div>
     </div>
     <div className='console'><div className='console-bar'><div className='dot r' /><div className='dot y' /><div className='dot g' /><span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '8px' }}>KeyGate proxy console</span></div><div className='console-body'>{consoleLines.map((l, i) => <p key={i} className='console-line'>{l}</p>)}</div></div>
-    <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>{snippetCard('Auto-generated JS snippet (click to copy)', jsSnippet)}{snippetCard('Auto-generated Python snippet (click to copy)', pySnippet)}{snippetCard('Auto-generated cURL snippet (click to copy)', curlSnippet)}</div>
+    <div className='snippet-grid' style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>{snippetCard('Auto-generated JS snippet (click to copy)', jsSnippet)}{snippetCard('Auto-generated Python snippet (click to copy)', pySnippet)}{snippetCard('Auto-generated cURL snippet (click to copy)', curlSnippet)}</div>
   </div></div>;
 }
