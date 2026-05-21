@@ -51,6 +51,17 @@ fastify.post('/api/master-keys', async (req, reply) => {
   return { success: true };
 });
 
+
+fastify.delete('/api/master-keys/:id', async (req, reply) => {
+  await query('DELETE FROM master_keys WHERE id = $1', [req.params.id]);
+  return { success: true };
+});
+
+fastify.delete('/api/subkeys/:id', async (req, reply) => {
+  await query('DELETE FROM subkeys WHERE id = $1', [req.params.id]);
+  return { success: true };
+});
+
 fastify.get('/api/subkeys', async () => {
   const { rows } = await query(`SELECT id, name, token_prefix, token_ciphertext_b64, token_iv_b64, token_auth_tag_b64, provider, master_key_id, auto_route_on_exhausted, monthly_token_limit, requests_per_minute_limit, tokens_used, status, spend_limit_usd, max_requests, request_count, allowed_models, EXTRACT(EPOCH FROM expires_at)::bigint AS expires_at, EXTRACT(EPOCH FROM created_at)::bigint AS created_at FROM subkeys ORDER BY created_at DESC`);
   return rows.map((row) => {
@@ -92,7 +103,13 @@ fastify.get('/api/analytics', async () => {
   const totalTokens = totals[0]?.total_tokens || 0;
   const avgLatency = logs.length ? Math.round(logs.reduce((s, r) => s + Number(r.latency_ms || 0), 0) / logs.length) : 0;
   const topModels = [...logs.reduce((m, r) => (m.set(r.model || 'unknown', (m.get(r.model || 'unknown') || 0) + 1), m), new Map()).entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([model, count]) => ({ model, count }));
-  return { totalRequests, totalTokens, avgLatency, topModels, logs };
+  const costAttribution = logs.map((l) => {
+    const t = Number(l.tokens_used || 0);
+    const isGemini = String(l.model || '').startsWith('gemini');
+    const est_cost_usd = isGemini ? (t / 1_000_000) * 0.15 : (t / 1_000_000) * 2.0;
+    return { model: l.model || 'unknown', est_cost_usd };
+  });
+  return { totalRequests, totalTokens, avgLatency, topModels, logs, costAttribution };
 });
 
 fastify.get('/api/quota-requests', async () => {
@@ -117,8 +134,21 @@ fastify.post('/v1/chat/completions', async (req, reply) => {
   if (!subkey) return reply.code(401).send({ error: { message: 'Invalid subkey.', type: 'auth_error' } });
   if (subkey.status !== 'active') return reply.code(403).send({ error: { message: `Subkey is ${subkey.status}.`, type: 'permission_error' } });
   if (subkey.expires_at && new Date(subkey.expires_at).getTime() < Date.now()) return reply.code(403).send({ error: { message: 'Subkey expired.', type: 'permission_error' } });
-  if (Number(subkey.request_count || 0) >= Number(subkey.max_requests || 5000)) return reply.code(403).send({ error: { message: 'Max requests reached.', type: 'permission_error' } });
+  if (Number(subkey.request_count || 0) >= Number(subkey.max_requests || 5000)) {
+    await query(`INSERT INTO request_logs (id,subkey_id,subkey_name,model,tokens_used,status,source,latency_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [randomUUID(), subkey.id, subkey.name, (req.body||{}).model || null, 0, 'max_requests_reached', req.headers['x-keygate-client'] || 'external', Date.now() - started]);
+    return reply.code(403).send({ error: { message: 'Max requests reached.', type: 'permission_error' } });
+  }
 
+
+  if (Number(subkey.tokens_used || 0) >= Number(subkey.monthly_token_limit || 0)) {
+    await query(`INSERT INTO request_logs (id,subkey_id,subkey_name,model,tokens_used,status,source,latency_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [randomUUID(), subkey.id, subkey.name, (req.body||{}).model || null, 0, 'quota_reached', req.headers['x-keygate-client'] || 'external', Date.now() - started]);
+    return reply.code(403).send({
+      error: {
+        message: 'Quota reached for this subkey. Please use /api/quota-requests endpoint to request a quota extension.',
+        type: 'quota_error',
+      }
+    });
+  }
   const rate = await rateLimitBySubkey(subkey.id, Number(subkey.requests_per_minute_limit || DEFAULT_RPM_LIMIT));
   reply.header('X-RateLimit-Limit', String(rate.limit));
   reply.header('X-RateLimit-Remaining', String(rate.remaining));

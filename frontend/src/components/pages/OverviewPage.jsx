@@ -24,10 +24,10 @@ export default function OverviewPage({ ctx, navigate }) {
     </div>
 
     <div className='card'><div className='card-header'><div><div className='card-title'>Usage graph (proxy requests trend)</div></div></div>
-      <div style={{display:'flex',alignItems:'end',gap:'4px',height:'70px'}}>{logs.slice(0,30).reverse().map((l,i)=><div key={i} style={{width:'8px',height:`${Math.max(8,Math.min(64,(l.tokens_used||1)/20))}px`,background:'var(--accent)',opacity:.8,borderRadius:'2px'}} />)}</div>
+      <div style={{display:'flex',alignItems:'end',gap:'4px',height:'70px'}}>{logs.slice(0,30).reverse().map((l,i)=><div key={i} title={`${l.subkey_name || '—'} | ${l.model || '—'} | ${fmtNum(l.tokens_used)} tokens | ${l.status}`} style={{width:'8px',height:`${Math.max(8,Math.min(64,(l.tokens_used||1)/20))}px`,background:'var(--accent)',opacity:.8,borderRadius:'2px'}} />)}</div>
     </div>
 
-    <div className='card'><div className='card-header'><div><div className='card-title'>Subkey analytics</div><div className='card-sub'>“Subkey X used 38,292 tokens today” style view</div></div><button className='btn btn-ghost btn-sm' onClick={() => navigate('subkeys')}>Manage keys →</button></div>
+    <div className='card'><div className='card-header'><div><div className='card-title'>Subkey analytics</div><div className='card-sub'></div></div><button className='btn btn-ghost btn-sm' onClick={() => navigate('subkeys')}>Manage keys →</button></div>
       {Object.entries(todayBySubkey).length ? Object.entries(todayBySubkey).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([name,tokens]) => <div key={name} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)'}}><span>{name}</span><span className='mono'>{fmtNum(tokens)} tokens today</span></div>) : <div className='empty'><div className='empty-text'>No subkey usage yet</div></div>}
     </div>
 
