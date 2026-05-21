@@ -75,7 +75,7 @@ async function initDb() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS master_keys (
         id UUID PRIMARY KEY,
-        provider TEXT NOT NULL UNIQUE,
+        provider TEXT NOT NULL,
         name TEXT,
         key_masked TEXT NOT NULL,
         ciphertext_b64 TEXT NOT NULL,
@@ -112,6 +112,8 @@ async function initDb() {
       ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_iv_b64 TEXT;
       ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_auth_tag_b64 TEXT;
       ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_key_version INTEGER;
+
+      ALTER TABLE master_keys DROP CONSTRAINT IF EXISTS master_keys_provider_key;
 
       CREATE TABLE IF NOT EXISTS request_logs (
         id UUID PRIMARY KEY,
