@@ -4,8 +4,8 @@ export default function OverviewPage({ ctx, navigate }) {
   const { subkeys, logs, analytics, fmtNum, quotaColor, fmtTime } = ctx;
   const failed = logs.filter((l) => l.status !== 'success').length;
   const costUsed = analytics.costAttribution?.reduce((s, r) => s + (r.est_cost_usd || 0), 0) || 0;
-  const topUser = Object.entries(todayBySubkey).sort((a,b)=>b[1]-a[1])[0];
   const todayBySubkey = logs.reduce((acc, l) => { acc[l.subkey_name || '—'] = (acc[l.subkey_name || '—'] || 0) + (l.tokens_used || 0); return acc; }, {});
+  const topUser = Object.entries(todayBySubkey).sort((a,b)=>b[1]-a[1])[0];
 
   return <div className='page active'><div style={{ padding: '32px 36px' }}>
     <div className='page-header'><div className='page-title'>Overview</div><div className='page-sub'>Observability dashboard for proxy usage</div></div>
