@@ -153,7 +153,7 @@ fastify.post('/v1/chat/completions', async (req, reply) => {
 async function start() {
   await redis.connect();
   await initDb();
-  const port = Number(process.env.PORT || 3001);
+  const port = 3001;
   await fastify.listen({ port, host: '0.0.0.0' });
   console.log(`🚀 Server running on http://localhost:${port}`);
 }
