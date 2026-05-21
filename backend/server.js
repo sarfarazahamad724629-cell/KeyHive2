@@ -52,7 +52,7 @@ fastify.post('/api/master-keys', async (req, reply) => {
 });
 
 fastify.get('/api/subkeys', async () => {
-  const { rows } = await query(`SELECT id, name, token_prefix, token_ciphertext_b64, token_iv_b64, token_auth_tag_b64, provider, monthly_token_limit, requests_per_minute_limit, tokens_used, status, spend_limit_usd, max_requests, request_count, allowed_models, EXTRACT(EPOCH FROM expires_at)::bigint AS expires_at, EXTRACT(EPOCH FROM created_at)::bigint AS created_at FROM subkeys ORDER BY created_at DESC`);
+  const { rows } = await query(`SELECT id, name, token_prefix, token_ciphertext_b64, token_iv_b64, token_auth_tag_b64, provider, master_key_id, auto_route_on_exhausted, monthly_token_limit, requests_per_minute_limit, tokens_used, status, spend_limit_usd, max_requests, request_count, allowed_models, EXTRACT(EPOCH FROM expires_at)::bigint AS expires_at, EXTRACT(EPOCH FROM created_at)::bigint AS created_at FROM subkeys ORDER BY created_at DESC`);
   return rows.map((row) => {
     let token = null;
     if (row.token_ciphertext_b64 && row.token_iv_b64 && row.token_auth_tag_b64) {
@@ -71,17 +71,17 @@ fastify.patch('/api/subkeys/:id', async (req, reply) => {
 });
 
 fastify.post('/api/subkeys', async (req, reply) => {
-  const { name, provider, monthly_token_limit = 50000, max_requests = 5000, allowed_models = ['all'], spend_limit_usd = null, expires_in_days = null } = req.body || {};
+  const { name, provider, master_key_id = null, auto_route_on_exhausted = false, monthly_token_limit = 50000, max_requests = 5000, allowed_models = ['all'], spend_limit_usd = null, expires_in_days = null } = req.body || {};
   if (!name || !provider) return reply.code(400).send({ error: 'name and provider required' });
   const id = randomUUID();
   const token = `sk-kg-${randomUUID().replace(/-/g, '')}`;
   const enc = encryptSecret(token, `subkey:${id}`);
   const expiresAt = expires_in_days ? new Date(Date.now() + Number(expires_in_days) * 86400 * 1000) : null;
-  await query(`INSERT INTO subkeys (id,name,token_hash,token_prefix,token_ciphertext_b64,token_iv_b64,token_auth_tag_b64,token_key_version,provider,monthly_token_limit,requests_per_minute_limit,spend_limit_usd,max_requests,allowed_models,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [id, name, hashToken(token), token.slice(0, 12), enc.ciphertext_b64, enc.iv_b64, enc.auth_tag_b64, enc.key_version, provider, Number(monthly_token_limit) || 50000, DEFAULT_RPM_LIMIT, spend_limit_usd, Number(max_requests) || 5000, JSON.stringify(allowed_models && allowed_models.length ? allowed_models : ['all']), expiresAt]);
+  await query(`INSERT INTO subkeys (id,name,token_hash,token_prefix,token_ciphertext_b64,token_iv_b64,token_auth_tag_b64,token_key_version,provider,master_key_id,auto_route_on_exhausted,monthly_token_limit,requests_per_minute_limit,spend_limit_usd,max_requests,allowed_models,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, [id, name, hashToken(token), token.slice(0, 12), enc.ciphertext_b64, enc.iv_b64, enc.auth_tag_b64, enc.key_version, provider, master_key_id, Boolean(auto_route_on_exhausted), Number(monthly_token_limit) || 50000, DEFAULT_RPM_LIMIT, spend_limit_usd, Number(max_requests) || 5000, JSON.stringify(allowed_models && allowed_models.length ? allowed_models : ['all']), expiresAt]);
   return { id, name, provider, token_prefix: token.slice(0, 12), token, requests_per_minute_limit: DEFAULT_RPM_LIMIT };
 });
 
-fastify.get('/api/models', async () => ({ data: [{ id: 'gpt-4o-mini' }, { id: 'gpt-4o' }, { id: 'gpt-4.1-mini' }, { id: 'gpt-4.1' }] }));
+fastify.get('/api/models', async () => ({ data: [{ id: 'gpt-4o-mini' }, { id: 'gpt-4o' }, { id: 'gpt-4.1-mini' }, { id: 'gpt-4.1' }, { id: 'gemini-2.5-flash' }, { id: 'gemini-2.5-pro' }] }));
 
 fastify.get('/api/analytics', async () => {
   const [{ rows: totals }, { rows: logs }] = await Promise.all([
@@ -112,7 +112,7 @@ fastify.post('/v1/chat/completions', async (req, reply) => {
   const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   if (!bearer) return reply.code(401).send({ error: { message: 'Missing Authorization header.', type: 'auth_error' } });
 
-  const { rows } = await query(`SELECT id,name,provider,status,requests_per_minute_limit,max_requests,request_count,monthly_token_limit,tokens_used,expires_at,allowed_models FROM subkeys WHERE token_hash = $1`, [hashToken(bearer)]);
+  const { rows } = await query(`SELECT id,name,provider,master_key_id,auto_route_on_exhausted,status,requests_per_minute_limit,max_requests,request_count,monthly_token_limit,tokens_used,expires_at,allowed_models FROM subkeys WHERE token_hash = $1`, [hashToken(bearer)]);
   const subkey = rows[0];
   if (!subkey) return reply.code(401).send({ error: { message: 'Invalid subkey.', type: 'auth_error' } });
   if (subkey.status !== 'active') return reply.code(403).send({ error: { message: `Subkey is ${subkey.status}.`, type: 'permission_error' } });
@@ -125,7 +125,10 @@ fastify.post('/v1/chat/completions', async (req, reply) => {
   reply.header('X-RateLimit-Reset', String(rate.reset));
   if (!rate.allowed) return reply.code(429).send({ code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests. Try again later.' });
 
-  const { rows: mkRows } = await query(`SELECT * FROM master_keys WHERE provider = $1 ORDER BY created_at DESC LIMIT 1`, [subkey.provider]);
+  const mkQuery = subkey.master_key_id
+    ? query('SELECT * FROM master_keys WHERE id = $1 AND provider = $2 LIMIT 1', [subkey.master_key_id, subkey.provider])
+    : query('SELECT * FROM master_keys WHERE provider = $1 ORDER BY created_at DESC LIMIT 1', [subkey.provider]);
+  const { rows: mkRows } = await mkQuery;
   const mk = mkRows[0];
   if (!mk) return reply.code(400).send({ error: { message: `No master key found for provider ${subkey.provider}.`, type: 'config_error' } });
 
@@ -136,8 +139,18 @@ fastify.post('/v1/chat/completions', async (req, reply) => {
 
   let status = 'success'; let tokensUsed = 0; let responseBody; let statusCode = 200;
   try {
-    const upstream = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { Authorization: `Bearer ${providerKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    let upstream;
+    if (subkey.provider === 'google') {
+      const geminiModel = payload.model || 'gemini-2.5-flash';
+      const geminiBody = { contents: [{ role: 'user', parts: [{ text: (payload.messages || []).map((m) => m.content).join('\n') || '' }] }] };
+      upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${providerKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) });
+    } else {
+      upstream = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { Authorization: `Bearer ${providerKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    }
     responseBody = await upstream.json().catch(() => ({}));
+    if (subkey.provider === 'google' && upstream.ok) {
+      responseBody = { choices: [{ message: { content: responseBody?.candidates?.[0]?.content?.parts?.[0]?.text || '' } }], usage: { total_tokens: responseBody?.usageMetadata?.totalTokenCount || 0 }, raw: responseBody };
+    }
     statusCode = upstream.status;
     if (!upstream.ok) status = upstream.status === 429 ? 'rate_limited' : 'error';
     tokensUsed = Number(responseBody?.usage?.total_tokens || 0);

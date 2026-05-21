@@ -112,6 +112,8 @@ async function initDb() {
       ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_iv_b64 TEXT;
       ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_auth_tag_b64 TEXT;
       ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS token_key_version INTEGER;
+      ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS master_key_id UUID;
+      ALTER TABLE subkeys ADD COLUMN IF NOT EXISTS auto_route_on_exhausted BOOLEAN NOT NULL DEFAULT false;
 
       ALTER TABLE master_keys DROP CONSTRAINT IF EXISTS master_keys_provider_key;
 
