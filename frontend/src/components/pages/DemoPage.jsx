@@ -1,27 +1,46 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import '../styles/DemoPage.css';
+
+const PROVIDER_MODELS = {
+  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'],
+  google: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+};
 
 export default function DemoPage({ ctx }) {
   const { subkeys, API, notify, sleep, copyText } = ctx;
   const [token, setToken] = useState('');
-  const [modelSearch, setModelSearch] = useState('');
   const [model, setModel] = useState('gpt-4o-mini');
   const [prompt, setPrompt] = useState('Say hello in exactly 5 words.');
   const [consoleLines, setConsoleLines] = useState(['# KeyGate live proxy demo', '# Select a subkey and hit "Run test call" to see the magic', 'ready — waiting for request']);
 
   const active = subkeys.filter((s) => s.status === 'active');
   const selectedSubkey = active.find((s) => s.token === token);
-  const allowedModelList = useMemo(() => {
-    if (!selectedSubkey) return ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
-    if (!selectedSubkey.allowed_models || selectedSubkey.allowed_models === 'all') {
-      return ctx.analytics?.topModels?.map((m) => m.model).filter(Boolean).length
-        ? [...new Set(ctx.analytics.topModels.map((m) => m.model))]
-        : ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
-    }
-    try { return JSON.parse(selectedSubkey.allowed_models); } catch { return ['gpt-4o-mini']; }
-  }, [selectedSubkey, ctx.analytics]);
 
-  const visibleModels = allowedModelList.filter((m) => m.toLowerCase().includes(modelSearch.toLowerCase()));
+  const providerModelList = useMemo(() => {
+    const provider = selectedSubkey?.provider || 'openai';
+    return PROVIDER_MODELS[provider] || PROVIDER_MODELS.openai;
+  }, [selectedSubkey]);
+
+  const allowedModelList = useMemo(() => {
+    if (!selectedSubkey) return PROVIDER_MODELS.openai;
+
+    const providerDefaults = PROVIDER_MODELS[selectedSubkey.provider] || PROVIDER_MODELS.openai;
+    if (!selectedSubkey.allowed_models || selectedSubkey.allowed_models === 'all') return providerDefaults;
+
+    try {
+      const allowed = JSON.parse(selectedSubkey.allowed_models);
+      if (!Array.isArray(allowed) || !allowed.length || allowed.includes('all')) return providerDefaults;
+      const filtered = allowed.filter((m) => providerDefaults.includes(m));
+      return filtered.length ? filtered : providerDefaults;
+    } catch {
+      return providerDefaults;
+    }
+  }, [selectedSubkey]);
+
+  useEffect(() => {
+    if (!allowedModelList.includes(model)) setModel(allowedModelList[0] || 'gpt-4o-mini');
+  }, [allowedModelList, model]);
+
   const preview = !token ? 'Select a subkey to see the request preview...' : `POST /v1/chat/completions\nAuthorization: Bearer ${token.slice(0, 12)}••••••\n\n{\n  "model": "${model}",\n  "messages": [{\n    "role": "user",\n    "content": "${prompt}"\n  }]\n}`;
   const add = (line) => setConsoleLines((v) => [...v, line]);
 
@@ -33,7 +52,6 @@ export default function DemoPage({ ctx }) {
     if (!token) return notify('Select a subkey first', 'error');
     if (!prompt.trim()) return notify('Enter a prompt', 'error');
     if (!model) return notify('Select a model', 'error');
-    const skName = selectedSubkey?.name || '—';
     setConsoleLines([`$ sending request with subkey ${token.slice(0, 16)}…`]);
     await sleep(250); add('→ validating subkey + model allowlist');
     await sleep(250); add(`→ model selected: ${model}`);
@@ -51,8 +69,7 @@ export default function DemoPage({ ctx }) {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
       <div className='card'><div className='card-header'><div className='card-title'>Configure test call</div></div>
         <div className='field'><label>Subkey to test</label><select value={token} onChange={(e) => setToken(e.target.value)}><option value=''>— select a subkey —</option>{active.map((s) => <option key={s.id} value={s.token}>{s.name}</option>)}</select></div>
-        <div className='field'><label>Search model</label><input value={modelSearch} onChange={(e) => setModelSearch(e.target.value)} placeholder='Search allowed models...' /></div>
-        <div className='field'><label>Model</label><select value={model} onChange={(e) => setModel(e.target.value)}>{visibleModels.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
+        <div className='field'><label>Model</label><select value={model} onChange={(e) => setModel(e.target.value)}>{allowedModelList.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
         <div className='field'><label>Prompt</label><input value={prompt} onChange={(e) => setPrompt(e.target.value)} /></div>
         <button className='btn btn-primary' style={{ width: '100%' }} onClick={runDemo}>Run test call →</button>
       </div>
