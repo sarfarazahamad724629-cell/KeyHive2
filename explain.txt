@@ -1,0 +1,159 @@
+KeyGate / KeyHive2 — Application Explanation
+===========================================
+
+1) What this app is
+-------------------
+This project is an API key gateway and dashboard that lets you safely share scoped subkeys instead of exposing real provider API keys.
+
+In simple terms:
+- Admin stores a real provider key (master key), encrypted at rest.
+- Admin creates subkeys for users/clients/teams.
+- Client apps use subkeys against this gateway endpoint.
+- Backend validates limits/rules, swaps subkey -> master key server-side, and forwards the request to the provider.
+- Every request is logged for monitoring and control.
+
+
+2) Main purpose
+---------------
+The app is designed to solve "I need to give API access, but I must not leak my real key".
+
+It provides:
+- Secret isolation (master key never shared with clients).
+- Policy controls per subkey (status, quota, request limits, allowed models, expiry).
+- Operational visibility (analytics + request logs).
+- Admin workflows (pause/revoke subkeys, handle quota extension requests).
+
+
+3) Architecture overview
+------------------------
+Frontend:
+- React dashboard (Vite) for admins to manage master keys/subkeys and inspect usage.
+
+Backend:
+- Fastify API server.
+- Exposes admin endpoints and one proxy endpoint compatible with chat-style calls.
+- Applies security/usage checks and sends requests upstream to providers.
+
+Data store:
+- PostgreSQL (with schema creation/migration logic on startup).
+
+Rate limiting:
+- Redis counters used per subkey and per-minute window.
+
+Encryption:
+- AES-256-GCM secret encryption utilities for stored keys/tokens.
+
+
+4) High-level data flow
+-----------------------
+A) Master key flow
+1. Admin adds provider key in dashboard.
+2. Backend encrypts and stores it in master_keys.
+3. UI only displays masked value.
+
+B) Subkey flow
+1. Admin creates subkey with provider + limits + allowed models.
+2. Backend generates subkey token, stores hash + encrypted token metadata.
+3. UI reveals full token once for copy/share.
+
+C) Proxy request flow
+1. Client sends request to /v1/chat/completions with subkey bearer token.
+2. Backend hashes token and finds subkey.
+3. Backend validates:
+   - status active?
+   - not expired?
+   - under max_requests?
+   - under monthly token quota?
+   - under per-minute rate limit?
+   - requested model allowed?
+4. Backend finds/decrypts matching master key.
+5. Backend forwards request to provider (OpenAI or Gemini path).
+6. Backend logs request outcome/tokens/latency.
+7. Backend updates subkey counters.
+8. Response is returned to caller.
+
+
+5) Providers currently supported
+--------------------------------
+- OpenAI
+- Google Gemini (Google AI Studio API path)
+
+Provider is selected at key/subkey level, and model selection in UI is filtered by provider.
+
+
+6) Security model (what is protected)
+-------------------------------------
+- Real provider keys are encrypted in DB.
+- Subkeys are distinct scoped credentials.
+- Clients never need the real provider key.
+- Backend performs key translation and policy enforcement.
+
+Important: true security in production also depends on strong key management, secure infra, auth on admin panel, auditing, backups, and secret rotation policies.
+
+
+7) Admin features in dashboard
+------------------------------
+- Master key management:
+  - add provider key
+  - list masked keys
+  - delete keys
+
+- Subkey management:
+  - create subkey
+  - set token quota, request limits, expiry, model allowlist
+  - choose provider
+  - optionally pin a specific master key for routing
+  - pause/activate/revoke status actions
+
+- Notifications & requests:
+  - see near-limit and expiring items
+  - create quota/expiry extension requests
+  - approve/reject requests
+
+- Observability:
+  - overview metrics
+  - usage graph
+  - request logs
+  - top usage user details
+
+
+8) Important backend endpoint groups
+------------------------------------
+Admin/config endpoints:
+- /api/master-keys
+- /api/subkeys
+- /api/models
+- /api/analytics
+- /api/quota-requests
+
+Proxy endpoint:
+- /v1/chat/completions
+
+Health endpoint:
+- /health
+
+
+9) Why this helps teams
+-----------------------
+This app makes API access operationally manageable:
+- safer sharing for client teams
+- instant revoke/pause instead of rotating a global key
+- clearer accountability via logs
+- easier budget/risk control using quotas and request limits
+
+
+10) Current caveats / production hardening checklist
+----------------------------------------------------
+For production-grade deployment, you should additionally verify:
+- admin authentication/authorization
+- CSRF/session hardening for dashboard
+- strict CORS policy (not just broad dev settings)
+- robust pricing calculator per provider/model tier
+- fallback routing behavior when a provider key is exhausted
+- alerting/monitoring + backup strategy
+- key rotation automation and incident response playbook
+
+
+11) One-sentence summary
+------------------------
+KeyGate is a secure API key broker: it lets users call AI providers using scoped subkeys while your encrypted master keys stay private and fully controlled by server-side policy.
