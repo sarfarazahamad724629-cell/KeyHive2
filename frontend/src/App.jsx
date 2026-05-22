@@ -7,7 +7,7 @@ import LogsPage from './components/pages/LogsPage';
 import DemoPage from './components/pages/DemoPage';
 import NotificationsPage from './components/pages/NotificationsPage';
 
-const API = 'http://localhost:8787'; // Change to match your backend port
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3001'; // Override with VITE_API_URL when needed
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const fmtNum = (n) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0));
 const fmtTime = (ts) => (!ts ? '—' : new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -25,7 +25,20 @@ export default function App() {
   const [modal, setModal] = useState('');
   const [revealedToken, setRevealedToken] = useState('—');
 
-  const api = async (path, opts = {}) => (await fetch(API + path, { headers: { 'Content-Type': 'application/json', ...opts.headers }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined })).json();
+  const api = async (path, opts = {}) => {
+    try {
+      const res = await fetch(API + path, { headers: { 'Content-Type': 'application/json', ...opts.headers }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error?.message || data?.error || `HTTP ${res.status}`);
+      return data;
+    } catch (err) {
+      const msg = String(err?.message || err);
+      if (msg.includes('Failed to fetch')) {
+        throw new Error(`Cannot reach backend at ${API}. Make sure backend is running and VITE_API_URL is correct.`);
+      }
+      throw err;
+    }
+  };
   const notify = (msg, type = 'success') => { setNotif({ show: true, msg, type }); setTimeout(() => setNotif((v) => ({ ...v, show: false })), 3000); };
   const copyText = (text) => navigator.clipboard.writeText(text).then(() => notify('Copied to clipboard'));
 
@@ -35,7 +48,7 @@ export default function App() {
   const loadLogs = async () => { const an = await api('/api/analytics'); setLogs(an.logs || []); setAnalytics(an); };
 
   const navigate = async (p) => { setPage(p); if (p === 'overview') await loadOverview(); if (p === 'masterkeys') await loadMasterKeys(); if (p === 'subkeys') await loadSubkeys(); if (p === 'logs') await loadLogs(); if (p === 'demo') await loadSubkeys(); if (p === 'notifications') await loadSubkeys(); };
-  useEffect(() => { loadOverview(); }, []);
+  useEffect(() => { loadOverview().catch((e) => notify(e.message || 'Failed to load overview', 'error')); }, []);
 
   const ctx = useMemo(() => ({ API, esc, fmtNum, fmtTime, fmtDate, quotaColor, sleep, api, notify, copyText, modal, setModal, revealedToken, setRevealedToken, loadMasterKeys, loadSubkeys, loadLogs, loadOverview, subkeys, setSubkeys, masterKeys, logs, analytics, page }), [modal, subkeys, masterKeys, logs, analytics, revealedToken, page]);
 
