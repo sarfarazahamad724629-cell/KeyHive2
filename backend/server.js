@@ -9,7 +9,11 @@ const { query, initDb, encryptSecret, decryptSecret } = require('./db');
 const DEFAULT_RPM_LIMIT = Number(process.env.RATE_LIMIT_DEFAULT_PER_MIN || 2);
 const redis = createClient({ url: process.env.REDIS_URL });
 
-fastify.register(require('@fastify/cors'), { origin: true });
+fastify.register(require('@fastify/cors'), {
+  origin: true,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-keygate-client'],
+});
 fastify.register(require('@fastify/helmet'), { contentSecurityPolicy: false });
 
 function hashToken(token) { return createHash('sha256').update(token).digest('hex'); }
