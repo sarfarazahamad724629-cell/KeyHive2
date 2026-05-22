@@ -123,7 +123,7 @@ tr:hover td{background:var(--bg3)}
 /* ── Modal ── */
 .modal-backdrop{position:fixed;inset:0;background:#00000088;display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
 .modal-backdrop.open{opacity:1;pointer-events:all}
-.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:28px;width:480px;max-width:90vw;transform:translateY(12px);transition:transform .2s}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:24px;width:min(900px,94vw);max-height:88vh;overflow:auto;transform:translateY(12px);transition:transform .2s}
 .modal-backdrop.open .modal{transform:translateY(0)}
 .modal-title{font-family:'Syne',sans-serif;font-size:17px;font-weight:700;margin-bottom:20px}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
@@ -174,3 +174,5 @@ tr:hover td{background:var(--bg3)}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+
+@media (max-width: 1100px){ .page > div > div[style*='grid-template-columns: 1fr 1fr 1fr']{grid-template-columns:1fr !important;} }
